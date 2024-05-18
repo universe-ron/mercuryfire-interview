@@ -3,8 +3,10 @@
     <div class="full-width q-px-xl">
       <div class="q-mb-xl">
         <q-input v-model="tempData.name" label="姓名" />
-        <q-input v-model="tempData.age" label="年齡" />
-        <q-btn color="primary" class="q-mt-md">新增</q-btn>
+        <q-input v-model="tempData.age" label="年齡" type="number" />
+        <q-btn color="primary" class="q-mt-md" @click="handleSave">
+          {{ isEditing ? '更新' : '新增' }}
+        </q-btn>
       </div>
 
       <q-table
@@ -35,7 +37,7 @@
               :props="props"
               style="min-width: 120px"
             >
-              <div>{{ col.value }}</div>
+              <div>{{ props.row[col.name] }}</div>
             </q-td>
             <q-td class="text-right" auto-width v-if="tableButtons.length > 0">
               <q-btn
@@ -80,18 +82,21 @@
 <script setup lang="ts">
 import axios from 'axios';
 import { QTableProps } from 'quasar';
-import { ref } from 'vue';
-interface btnType {
+import { ref, reactive } from 'vue';
+
+interface BtnType {
   label: string;
   icon: string;
   status: string;
 }
-const blockData = ref([
-  {
-    name: 'test',
-    age: 25,
-  },
-]);
+
+interface DataType {
+  id: string;
+  name: string;
+  age: number;
+}
+
+const blockData = ref<DataType[]>([]);
 const tableConfig = ref([
   {
     label: '姓名',
@@ -106,7 +111,7 @@ const tableConfig = ref([
     align: 'left',
   },
 ]);
-const tableButtons = ref([
+const tableButtons = ref<BtnType[]>([
   {
     label: '編輯',
     icon: 'edit',
@@ -119,13 +124,95 @@ const tableButtons = ref([
   },
 ]);
 
-const tempData = ref({
+const tempData = reactive<DataType>({
+  id: '',
   name: '',
-  age: '',
+  age: NaN,
 });
-function handleClickOption(btn, data) {
-  // ...
+const isEditing = ref(false);
+
+async function fetchData() {
+  try {
+    const response = await axios.get('https://dahua.metcfire.com.tw/api/CRUDTest/a');
+    console.log('Fetched data:', response.data);
+    blockData.value = response.data;
+  } catch (error) {
+    console.error('Error fetching data:', error);
+  }
 }
+
+async function handleSave() {
+  if (!tempData.name || isNaN(tempData.age)) {
+    alert('姓名和年齡一定要填!');
+    return;
+  }
+
+  try {
+    if (isEditing.value) {
+      await axios.post('https://dahua.metcfire.com.tw/api/CRUDTest', tempData);
+      const index = blockData.value.findIndex(item => item.id === tempData.id);
+      if (index !== -1) {
+        blockData.value[index] = { ...tempData };
+      }
+      console.log('Updated data:', tempData);
+    } else {
+      const response = await axios.post('https://dahua.metcfire.com.tw/api/CRUDTest', tempData);
+      blockData.value.unshift(response.data);
+      console.log('Created data response:', response.data);
+    }
+    resetForm();
+  } catch (error) {
+    console.error('Error saving data:', error);
+  }
+}
+
+function resetForm() {
+  tempData.id = '';
+  tempData.name = '';
+  tempData.age = NaN;
+  isEditing.value = false;
+}
+
+function handleClickOption(btn: BtnType, data: DataType) {
+  if (btn.status === 'edit') {
+    editData(data);
+  } else if (btn.status === 'delete') {
+    deleteData(data.id);
+  }
+}
+
+function editData(data: DataType) {
+  tempData.id = data.id;
+  tempData.name = data.name;
+  tempData.age = data.age;
+  isEditing.value = true;
+  console.log('Editing data:', data);
+  scrollToTop();
+}
+
+async function deleteData(id: string) {
+  try {
+    if (confirm('要刪除嗎')) {
+      await axios.delete(`https://dahua.metcfire.com.tw/api/CRUDTest/${id}`);
+      const index = blockData.value.findIndex(item => item.id === id);
+      if (index !== -1) {
+        blockData.value.splice(index, 1);
+      }
+      console.log('Deleted data ID:', id);
+    }
+  } catch (error) {
+    console.error('Error deleting data:', error);
+  }
+}
+
+function scrollToTop() {
+  window.scrollTo({
+    top: 0,
+    behavior: 'smooth'
+  });
+}
+
+fetchData();
 </script>
 
 <style lang="scss" scoped>
